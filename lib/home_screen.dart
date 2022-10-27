@@ -1,8 +1,15 @@
+import 'dart:math';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crud_operations/bloc.dart';
+import 'package:crud_operations/detail_dialogbox.dart';
 import 'package:crud_operations/firebase_services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:fluttertoast/fluttertoast.dart';
+import 'package:intl/intl.dart';
+
+import 'model.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -13,7 +20,7 @@ class _HomeScreenState extends State<HomeScreen> {
   TextEditingController _taskController = TextEditingController();
   List<bool> _checkList = [];
   bool _isLoad = false;
-  List<String> localList = [];
+
   @override
   void initState() {
     // TODO: implement initState
@@ -23,21 +30,26 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   getData() async {
-    localList = await context.read<CrudBloc>().getTitleList();
-    _checkList = List<bool>.filled(localList.length, false, growable: true);
+    await context.read<CrudBloc>().getTitleList();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("CRUD OPERATIONS")),
+      appBar: AppBar(title: Text("CRUD OPERATIONS"), actions: [
+        IconButton(
+            onPressed: () async {
+              getData();
+            },
+            icon: Icon(Icons.restore))
+      ]),
       body: SingleChildScrollView(
         padding: EdgeInsets.symmetric(horizontal: 10),
         child: Column(
           children: [
             TextField(
               controller: _taskController,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 hintText: "Task Name",
               ),
               onSubmitted: (value) async {
@@ -45,8 +57,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   setState(() {
                     _isLoad = true;
                   });
-                  await context.read<CrudBloc>().updateTitleList(value);
-                  _checkList.add(false);
+                  var rng = new Random();
+                  var code = rng.nextInt(900000) + 100000;
+                  String docId = value.substring(0, 4).trim() + code.toString();
+                  print("random no is ${docId}");
+                  await context.read<CrudBloc>().addTitleList(TaskModel(
+                      creationDate: DateTime.now().toString(),
+                      docID: docId.toString(),
+                      title: value,
+                      description: "",
+                      imageUrl: ""));
                   setState(() {
                     _isLoad = false;
                   });
@@ -54,7 +74,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 _taskController.clear();
               },
             ),
-
             Container(
               height: MediaQuery.of(context).size.height * 0.9,
               child: BlocBuilder<CrudBloc, CrudBlocState>(
@@ -66,83 +85,72 @@ class _HomeScreenState extends State<HomeScreen> {
                         : ListView.builder(
                             itemCount: state.titleList!.reversed.length,
                             itemBuilder: (context, index) {
-                              return CheckboxListTile(
-                                title: Text(
+                              return Dismissible(
+                                key: ObjectKey(
                                     state.titleList!.reversed.toList()[index]),
-                                value: _checkList[index],
-                                selectedTileColor: _checkList[index]
-                                    ? Colors.grey
-                                    : Colors.transparent,
-                                selected: true,
-                                onChanged: (val) {
-                                  _checkList[index] = val!;
-                                  setState(() {});
+                                onDismissed: (DismissDirection direction) {
+                                  switch (direction) {
+                                    case DismissDirection.endToStart:
+                                      Fluttertoast.showToast(
+                                          msg: "Swipe right to delete");
+                                      break;
+                                    case DismissDirection.startToEnd:
+                                      Fluttertoast.showToast(
+                                          msg: "Swipe left to download");
+
+                                      break;
+                                    default:
+                                      break;
+                                  }
                                 },
+                                background: Container(
+                                    alignment: Alignment.centerLeft,
+                                    color: Colors.green,
+                                    padding:
+                                        EdgeInsets.symmetric(horizontal: 20),
+                                    child: const Icon(
+                                      Icons.archive_sharp,
+                                      color: Colors.white,
+                                      size: 25,
+                                    )),
+                                secondaryBackground: Container(
+                                    alignment: Alignment.centerRight,
+                                    padding:
+                                        EdgeInsets.symmetric(horizontal: 20),
+                                    color: Colors.red,
+                                    child: const Icon(Icons.delete_forever,
+                                        color: Colors.white, size: 25)),
+                                child: ListTile(
+                                  title: Text(state.titleList!.reversed
+                                      .toList()[index]
+                                      .title
+                                      .toString()),
+                                  subtitle: Text(DateFormat("dd-MM-yyyy")
+                                          .format(DateTime.parse(state
+                                              .titleList!.reversed
+                                              .toList()[index]
+                                              .creationDate
+                                              .toString())) +
+                                      "   " +
+                                      DateFormat("hh:mm a").format(
+                                          DateTime.parse(state
+                                              .titleList!.reversed
+                                              .toList()[index]
+                                              .creationDate
+                                              .toString()))),
+                                  onTap: () async {
+                                    await showDialog(
+                                        context: context,
+                                        builder: (context) => DetailDialogBox(
+                                              model: state.titleList!.reversed
+                                                  .toList()[index],
+                                            ));
+                                  },
+                                ),
                               );
                             });
-
-                //  Column(
-                //     children: state.titleList!.map((e) {
-                //       return CheckboxListTile(
-                //         title: Text(e.toString()),
-                //         value: _isChecked,
-                //         onChanged: (val) {
-                //           print("index value is ${_isChecked.toString()}");
-                //           // _isChecked[index] = val!;
-                //           print("after value is ${_isChecked.toString()}");
-                //           setState(() {});
-                //         },
-                //       );
-                //     }).toList(),
-                //   );
               })),
             )
-            // Container(
-            //   height: MediaQuery.of(context).size.height * 0.9,
-            //   child: StreamBuilder(
-            //     stream:
-            //         FirebaseFirestore.instance.collection("daat").snapshots(),
-            //     builder: (BuildContext context,
-            //         AsyncSnapshot<QuerySnapshot> snapshot) {
-            //       // print("stream data is ${snapshot.data!.docs.length}");
-            //       // _isChecked =
-            //       //     List<bool>.filled(snapshot.data!.docs.length, false);
-            //       if (snapshot.hasError) {
-            //         return const Text('Something went wrong');
-            //       }
-
-            //       if (snapshot.connectionState == ConnectionState.waiting) {
-            //         return Center(child: const Text("Loading"));
-            //       }
-            //       return ListView.builder(
-            //         itemCount: snapshot.data!.docs.length,
-            //         itemBuilder: (context, index) {
-            //           Map<String, dynamic> data = snapshot.data!.docs[index]
-            //               .data() as Map<String, dynamic>;
-
-            //           // print("data   ${data}");
-            //           return CheckboxListTile(
-            //             title: Text(data['data'].toString()),
-            //             value: _isChecked,
-            //             onChanged: (val) {
-            //               print("index value is ${_isChecked.toString()}");
-            //               // _isChecked[index] = val!;
-            //               print("after value is ${_isChecked.toString()}");
-            //               setState(() {});
-            //             },
-            //           );
-
-            //           //  RaisedButton(
-            //           //   onPressed: () async {
-            //           //     await deleteProduct(snapshot.data!.docs[index]);
-            //           //   },
-            //           //   child: Text("Task is ${data['data']}"),
-            //           // );
-            //         },
-            //       );
-            //     },
-            //   ),
-            // ),
           ],
         ),
       ),
